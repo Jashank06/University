@@ -11,7 +11,7 @@ import './App.css';
 
 function App() {
     return (
-        <Router>
+        <Router basename="/University">
             <div className="app">
                 <Sidebar />
                 <main className="main-content">
