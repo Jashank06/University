@@ -30,11 +30,11 @@ jobs:
           
       - name: Install dependencies
         run: npm ci
-        working-directory: ./manav-rachna-dashboard/frontend
+        working-directory: frontend
         
       - name: Build
         run: npm run build
-        working-directory: ./manav-rachna-dashboard/frontend
+        working-directory: frontend
         
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -42,7 +42,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './manav-rachna-dashboard/frontend/dist'
+          path: 'frontend/dist'
 
   deploy:
     environment:
