@@ -15,6 +15,7 @@ import {
     PremiumActiveDot
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const ResultAnalysis = () => {
     const [data, setData] = useState(null);
@@ -22,11 +23,52 @@ const ResultAnalysis = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        batch: '',
+        course: '',
+        semester: '',
+        program: '',
+        academicYear: '',
+        result: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        batches: [],
+        courses: [],
+        semesters: [],
+        programs: [],
+        academicYears: [],
+        results: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/result-analysis`);
+            const params = new URLSearchParams();
+            Object.keys(filters).forEach(key => {
+                if (filters[key]) params.append(key, filters[key]);
+            });
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/result-analysis?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.programs.length === 0 && response.data.data.raw) {
+                const raw = response.data.data.raw;
+                const getUnique = (key) => [...new Set(raw.map(item => item[key]))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    batches: getUnique('Batch'),
+                    courses: getUnique('Course'),
+                    semesters: getUnique('Semester'),
+                    programs: getUnique('Program'),
+                    academicYears: getUnique('Academic Year'),
+                    results: getUnique('Result')
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -40,7 +82,23 @@ const ResultAnalysis = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({
+            batch: '',
+            course: '',
+            semester: '',
+            program: '',
+            academicYear: '',
+            result: ''
+        });
+    };
 
     if (loading) return <div className="loading">📈 Loading result data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -50,13 +108,74 @@ const ResultAnalysis = () => {
 
     const totalBacklogs = data?.failedStudents?.length || 0;
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('result-analysis-dashboard', 'Result Analysis Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">📈 Academic Results Analysis</h1>
-                <p className="dashboard-subtitle">
-                    Comprehensive performance metrics, pass/fail trends, and student achievement analytics
-                </p>
+        <div className="dashboard-container" id="result-analysis-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">📈 Academic Results Analysis</h1>
+                    <p className="dashboard-subtitle">
+                        Comprehensive performance metrics, pass/fail trends, and student achievement analytics
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Program</label>
+                    <select name="program" value={filters.program} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Programs</option>
+                        {filterOptions.programs.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Course</label>
+                    <select name="course" value={filters.course} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Courses</option>
+                        {filterOptions.courses.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Semester</label>
+                    <select name="semester" value={filters.semester} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Semesters</option>
+                        {filterOptions.semesters.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Result</label>
+                    <select name="result" value={filters.result} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Results</option>
+                        {filterOptions.results.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Batch</label>
+                    <select name="batch" value={filters.batch} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Batches</option>
+                        {filterOptions.batches.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Academic Year</label>
+                    <select name="academicYear" value={filters.academicYear} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Years</option>
+                        {filterOptions.academicYears.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+
+                {Object.values(filters).some(Boolean) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

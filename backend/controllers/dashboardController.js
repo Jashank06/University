@@ -10,7 +10,18 @@ exports.getAdmissionTrends = async (req, res) => {
         const sheetName = process.env.ADMISSION_TRENDS_SHEET_NAME || 'Sheet1';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:E`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { program, category } = req.query;
+        if (program || category) {
+            data = data.filter(item => {
+                let match = true;
+                if (program && item.Program !== program) match = false;
+                if (category && item.Category !== category) match = false;
+                return match;
+            });
+        }
 
         // Process data for different visualizations
         const yearWise = processYearWiseData(data);
@@ -44,7 +55,24 @@ exports.getAttendanceAnalytics = async (req, res) => {
         const sheetName = process.env.ATTENDANCE_ANALYTICS_SHEET_NAME || 'Sheet1';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:E`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { course, program, semester, startAttendance, endAttendance } = req.query;
+        if (course || program || semester || startAttendance || endAttendance) {
+            data = data.filter(item => {
+                let match = true;
+                if (course && item.Course !== course) match = false;
+                if (program && item.Program !== program) match = false;
+                if (semester && item.Semester !== semester) match = false;
+                
+                const attendance = parseFloat(item['Attendance %']);
+                if (startAttendance && attendance < parseFloat(startAttendance)) match = false;
+                if (endAttendance && attendance > parseFloat(endAttendance)) match = false;
+                
+                return match;
+            });
+        }
 
         // Process data
         const courseWise = processCourseAttendance(data);
@@ -76,7 +104,23 @@ exports.getResultAnalysis = async (req, res) => {
         const sheetName = process.env.RESULT_ANALYSIS_SHEET_NAME || 'Sheet1';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:F`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { batch, course, semester, program, academicYear, result } = req.query;
+        if (batch || course || semester || program || academicYear || result) {
+            data = data.filter(item => {
+                let match = true;
+                // Note: Check actual column names in sheet for Batch/Academic Year if they differ
+                if (batch && item.Batch !== batch) match = false; 
+                if (course && item.Course !== course) match = false;
+                if (semester && item.Semester !== semester) match = false;
+                if (program && item.Program !== program) match = false;
+                if (academicYear && item['Academic Year'] !== academicYear) match = false;
+                if (result && item.Result?.toLowerCase() !== result.toLowerCase()) match = false;
+                return match;
+            });
+        }
 
         // Calculate pass/fail statistics by program
         const programStats = processProgramStats(data);
@@ -108,7 +152,23 @@ exports.getFeedbackAnalysis = async (req, res) => {
         const sheetName = process.env.FEEDBACK_ANALYSIS_SHEET_NAME || 'Sheet1';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:E`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { program, minRating } = req.query;
+        if (program || minRating) {
+            data = data.filter(item => {
+                let match = true;
+                if (program && item.Program !== program) match = false;
+                
+                if (minRating) {
+                    const rating = parseFloat(item.Rating);
+                    if (rating < parseFloat(minRating)) match = false;
+                }
+                
+                return match;
+            });
+        }
 
         // Process feedback data
         const facultyRatings = processFacultyRatings(data);
@@ -142,7 +202,26 @@ exports.getPlacementAnalysis = async (req, res) => {
         const sheetName = process.env.PLACEMENT_ANALYSIS_SHEET_NAME || 'Sheet1';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:E`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { program, company, minPackage, status } = req.query;
+        if (program || company || minPackage || status) {
+            data = data.filter(item => {
+                let match = true;
+                const pgm = item.program || item.Program;
+                if (program && pgm !== program) match = false;
+                if (company && item.Company !== company) match = false;
+                if (status && item.Status?.toLowerCase() !== status.toLowerCase()) match = false;
+
+                if (minPackage) {
+                    const pkg = parseFloat(item['Package (LPA)']);
+                    if (pkg < parseFloat(minPackage)) match = false;
+                }
+
+                return match;
+            });
+        }
 
         // Process placement data
         const placedStudents = data.filter(item => item.Status && item.Status.toLowerCase() === 'placed');
@@ -430,7 +509,25 @@ exports.getPublications = async (req, res) => {
         const sheetName = process.env.PUBLICATIONS_SHEET_NAME || 'Publication';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:G`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { faculty, department, type, journalName, journalType } = req.query;
+        
+        if (faculty || department || type || journalName || journalType) {
+            data = data.filter(item => {
+                let match = true;
+                if (faculty && item.Faculty !== faculty) match = false;
+                if (department && item.Department !== department) match = false;
+                if (type && item.Type !== type) match = false;
+                
+                // Flexible matching for journal fields as column names might vary
+                if (journalName && item['Name of the Journal'] !== journalName) match = false;
+                 if (journalType && item['Type of Journal'] !== journalType) match = false;
+
+                return match;
+            });
+        }
 
         // Process data for visualizations
         const yearWise = processPublicationYearData(data);
@@ -464,7 +561,22 @@ exports.getPatents = async (req, res) => {
         const sheetName = process.env.PATENTS_SHEET_NAME || 'Patent';
 
         const rows = await getSheetData(sheetId, `${sheetName}!A:G`);
-        const data = rowsToObjects(rows);
+        let data = rowsToObjects(rows);
+
+        // Filter data if query parameters are present
+        const { faculty, department, year, type, status } = req.query;
+
+        if (faculty || department || year || type || status) {
+            data = data.filter(item => {
+                let match = true;
+                if (faculty && item.Faculty !== faculty) match = false;
+                if (department && item.Department !== department) match = false;
+                if (year && String(item.Year) !== String(year)) match = false;
+                if (type && item.Type !== type) match = false;
+                if (status && item['Status (Filed/Granted)'] !== status && item.Status !== status) match = false;
+                return match;
+            });
+        }
 
         // Process data for visualizations
         const yearWise = processPatentYearData(data);

@@ -13,6 +13,8 @@ import {
     GRID_STYLE
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
+
 
 const FeedbackAnalysis = () => {
     const [data, setData] = useState(null);
@@ -20,11 +22,33 @@ const FeedbackAnalysis = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        program: '',
+        minRating: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        programs: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/feedback-analysis`);
+            const params = new URLSearchParams();
+            if (filters.program) params.append('program', filters.program);
+            if (filters.minRating) params.append('minRating', filters.minRating);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/feedback-analysis?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.programs.length === 0 && response.data.data.raw) {
+                const uniquePrograms = [...new Set(response.data.data.raw.map(item => item.Program))].filter(Boolean).sort();
+                setFilterOptions({ programs: uniquePrograms });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -38,7 +62,16 @@ const FeedbackAnalysis = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({ program: '', minRating: '' });
+    };
 
     if (loading) return <div className="loading">⭐ Loading feedback data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -55,13 +88,61 @@ const FeedbackAnalysis = () => {
         return '😟'; // Needs Improvement
     };
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('feedback-analysis-dashboard', 'Feedback Analysis Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">⭐ Feedback Analysis</h1>
-                <p className="dashboard-subtitle">
-                    Student feedback ratings, faculty performance metrics, and satisfaction analytics
-                </p>
+        <div className="dashboard-container" id="feedback-analysis-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">⭐ Feedback Analysis</h1>
+                    <p className="dashboard-subtitle">
+                        Student feedback ratings, faculty performance metrics, and satisfaction analytics
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Program</label>
+                    <select
+                        name="program"
+                        value={filters.program}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Programs</option>
+                        {filterOptions.programs.map((p, i) => (
+                            <option key={i} value={p}>{p}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Min Rating</label>
+                    <select
+                        name="minRating"
+                        value={filters.minRating}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">Any Rating</option>
+                        <option value="4.5">4.5+ Stars (Excellent)</option>
+                        <option value="4.0">4.0+ Stars (Very Good)</option>
+                        <option value="3.5">3.5+ Stars (Good)</option>
+                        <option value="3.0">3.0+ Stars (Average)</option>
+                    </select>
+                </div>
+
+                {(filters.program || filters.minRating) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

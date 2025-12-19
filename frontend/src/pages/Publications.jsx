@@ -16,6 +16,7 @@ import {
     premiumPieLabel
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const Publications = () => {
     const [data, setData] = useState(null);
@@ -23,11 +24,51 @@ const Publications = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        faculty: '',
+        department: '',
+        type: '',
+        journalName: '',
+        journalType: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        faculties: [],
+        departments: [],
+        types: [],
+        journalNames: [],
+        journalTypes: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/research/publications`);
+            const params = new URLSearchParams();
+            if (filters.faculty) params.append('faculty', filters.faculty);
+            if (filters.department) params.append('department', filters.department);
+            if (filters.type) params.append('type', filters.type);
+            if (filters.journalName) params.append('journalName', filters.journalName);
+            if (filters.journalType) params.append('journalType', filters.journalType);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/research/publications?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.faculties.length === 0 && response.data.data.raw) {
+                const raw = response.data.data.raw;
+                const getUnique = (key) => [...new Set(raw.map(item => item[key]))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    faculties: getUnique('Faculty'),
+                    departments: getUnique('Department'),
+                    types: getUnique('Type'),
+                    journalNames: getUnique('Name of the Journal'),
+                    journalTypes: getUnique('Type of Journal')
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -41,7 +82,22 @@ const Publications = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({
+            faculty: '',
+            department: '',
+            type: '',
+            journalName: '',
+            journalType: ''
+        });
+    };
 
     if (loading) return <div className="loading">📊 Loading publications data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -49,15 +105,71 @@ const Publications = () => {
     const totalPublications = data?.raw?.length || 0;
     const indexedCount = data?.raw?.filter(p => p['Indexed (Yes/No)']?.toLowerCase() === 'yes').length || 0;
     const totalCitations = data?.raw?.reduce((sum, item) => sum + parseInt(item.Citations || 0), 0) || 0;
+
+
     const indexedPercentage = totalPublications > 0 ? ((indexedCount / totalPublications) * 100).toFixed(1) : 0;
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('publications-dashboard', 'Research Publications Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">📚 Research Publications</h1>
-                <p className="dashboard-subtitle">
-                    Comprehensive analysis of faculty publications, citations, and research output across departments
-                </p>
+        <div className="dashboard-container" id="publications-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">📚 Research Publications</h1>
+                    <p className="dashboard-subtitle">
+                        Comprehensive analysis of faculty publications, citations, and research output across departments
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Faculty</label>
+                    <select name="faculty" value={filters.faculty} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Faculty</option>
+                        {filterOptions.faculties.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Department</label>
+                    <select name="department" value={filters.department} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Departments</option>
+                        {filterOptions.departments.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Type</label>
+                    <select name="type" value={filters.type} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Types</option>
+                        {filterOptions.types.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Journal Name</label>
+                    <select name="journalName" value={filters.journalName} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Journals</option>
+                        {filterOptions.journalNames.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Journal Type</label>
+                    <select name="journalType" value={filters.journalType} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Categories</option>
+                        {filterOptions.journalTypes.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+
+                {Object.values(filters).some(Boolean) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

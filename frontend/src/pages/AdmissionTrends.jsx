@@ -14,6 +14,7 @@ import {
     premiumPieLabel
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const AdmissionTrends = () => {
     const [data, setData] = useState(null);
@@ -21,11 +22,39 @@ const AdmissionTrends = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        program: '',
+        category: ''
+    });
+
+    // Options for dropdowns
+    const [filterOptions, setFilterOptions] = useState({
+        programs: [],
+        categories: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/admission-trends`);
+            const params = new URLSearchParams();
+            if (filters.program) params.append('program', filters.program);
+            if (filters.category) params.append('category', filters.category);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/admission-trends?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.programs.length === 0 && response.data.data.raw) {
+                const uniquePrograms = [...new Set(response.data.data.raw.map(item => item.Program))].filter(Boolean).sort();
+                const uniqueCategories = [...new Set(response.data.data.raw.map(item => item.Category))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    programs: uniquePrograms,
+                    categories: uniqueCategories
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -39,7 +68,16 @@ const AdmissionTrends = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({ program: '', category: '' });
+    };
 
     if (loading) return <div className="loading">📊 Loading admission data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -50,13 +88,63 @@ const AdmissionTrends = () => {
     const growth = previousYear ?
         ((latestYear?.admissions - previousYear?.admissions) / previousYear?.admissions * 100).toFixed(1) : 0;
 
+    const handleDownloadReport = async () => {
+        const success = await generatePDFReport('admission-trends-dashboard', 'Admission Trends Report');
+        if (success) {
+            // Optional: Show success toast
+            console.log('Report downloaded successfully');
+        }
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">📊 Admission Trends</h1>
-                <p className="dashboard-subtitle">
-                    Comprehensive analysis of university admissions across years, courses, and student demographics
-                </p>
+        <div className="dashboard-container" id="admission-trends-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">📊 Admission Trends</h1>
+                    <p className="dashboard-subtitle">
+                        Comprehensive analysis of university admissions across years, courses, and student demographics
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Program</label>
+                    <select
+                        name="program"
+                        value={filters.program}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Programs</option>
+                        {filterOptions.programs.map((prog, index) => (
+                            <option key={index} value={prog}>{prog}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Category</label>
+                    <select
+                        name="category"
+                        value={filters.category}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Categories</option>
+                        {filterOptions.categories.map((cat, index) => (
+                            <option key={index} value={cat}>{cat}</option>
+                        ))}
+                    </select>
+                </div>
+                {(filters.program || filters.category) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset Filters
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

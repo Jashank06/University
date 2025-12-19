@@ -15,6 +15,7 @@ import {
     PremiumActiveDot
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const AttendanceAnalytics = () => {
     const [data, setData] = useState(null);
@@ -22,11 +23,49 @@ const AttendanceAnalytics = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        course: '',
+        program: '',
+        semester: '',
+        startAttendance: '',
+        endAttendance: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        courses: [],
+        programs: [],
+        semesters: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/attendance-analytics`);
+            const params = new URLSearchParams();
+            if (filters.course) params.append('course', filters.course);
+            if (filters.program) params.append('program', filters.program);
+            if (filters.semester) params.append('semester', filters.semester);
+            if (filters.startAttendance) params.append('startAttendance', filters.startAttendance);
+            if (filters.endAttendance) params.append('endAttendance', filters.endAttendance);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/attendance-analytics?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.courses.length === 0 && response.data.data.raw) {
+                const raw = response.data.data.raw;
+                const uniqueCourses = [...new Set(raw.map(item => item.Course))].filter(Boolean).sort();
+                const uniquePrograms = [...new Set(raw.map(item => item.Program))].filter(Boolean).sort();
+                const uniqueSemesters = [...new Set(raw.map(item => item.Semester))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    courses: uniqueCourses,
+                    programs: uniquePrograms,
+                    semesters: uniqueSemesters
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -40,7 +79,22 @@ const AttendanceAnalytics = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({
+            course: '',
+            program: '',
+            semester: '',
+            startAttendance: '',
+            endAttendance: ''
+        });
+    };
 
     if (loading) return <div className="loading">📅 Loading attendance data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -50,13 +104,100 @@ const AttendanceAnalytics = () => {
 
     const lowAttendanceCount = data?.lowAttendance?.length || 0;
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('attendance-dashboard', 'Attendance Analytics Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">📅 Attendance Analytics</h1>
-                <p className="dashboard-subtitle">
-                    Real-time monitoring of student attendance trends across subjects and semesters
-                </p>
+        <div className="dashboard-container" id="attendance-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">📅 Attendance Analytics</h1>
+                    <p className="dashboard-subtitle">
+                        Real-time monitoring of student attendance trends across subjects and semesters
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Course</label>
+                    <select
+                        name="course"
+                        value={filters.course}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Courses</option>
+                        {filterOptions.courses.map((c, i) => (
+                            <option key={i} value={c}>{c}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Program</label>
+                    <select
+                        name="program"
+                        value={filters.program}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Programs</option>
+                        {filterOptions.programs.map((p, i) => (
+                            <option key={i} value={p}>{p}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Semester</label>
+                    <select
+                        name="semester"
+                        value={filters.semester}
+                        onChange={handleFilterChange}
+                        className="filter-select"
+                    >
+                        <option value="">All Semesters</option>
+                        {filterOptions.semesters.map((s, i) => (
+                            <option key={i} value={s}>{s}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-group" style={{ flex: '0 0 150px' }}>
+                    <label className="filter-label">Min %</label>
+                    <input
+                        type="number"
+                        name="startAttendance"
+                        value={filters.startAttendance}
+                        onChange={handleFilterChange}
+                        className="filter-input"
+                        placeholder="0"
+                        min="0"
+                        max="100"
+                    />
+                </div>
+                <div className="filter-group" style={{ flex: '0 0 150px' }}>
+                    <label className="filter-label">Max %</label>
+                    <input
+                        type="number"
+                        name="endAttendance"
+                        value={filters.endAttendance}
+                        onChange={handleFilterChange}
+                        className="filter-input"
+                        placeholder="100"
+                        min="0"
+                        max="100"
+                    />
+                </div>
+
+                {(filters.course || filters.program || filters.semester || filters.startAttendance || filters.endAttendance) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

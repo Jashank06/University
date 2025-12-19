@@ -16,6 +16,7 @@ import {
     premiumPieLabel
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const Patents = () => {
     const [data, setData] = useState(null);
@@ -23,11 +24,54 @@ const Patents = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        faculty: '',
+        department: '',
+        type: '',
+        year: '',
+        status: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        faculties: [],
+        departments: [],
+        types: [],
+        years: [],
+        statuses: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/research/patents`);
+            const params = new URLSearchParams();
+            if (filters.faculty) params.append('faculty', filters.faculty);
+            if (filters.department) params.append('department', filters.department);
+            if (filters.type) params.append('type', filters.type);
+            if (filters.year) params.append('year', filters.year);
+            if (filters.status) params.append('status', filters.status);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/research/patents?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.faculties.length === 0 && response.data.data.raw) {
+                const raw = response.data.data.raw;
+                const getUnique = (key) => [...new Set(raw.map(item => item[key]))].filter(Boolean).sort();
+
+                // Handle Status specially as column name might vary
+                const uniqueStatuses = [...new Set(raw.map(item => item['Status (Filed/Granted)'] || item.Status))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    faculties: getUnique('Faculty'),
+                    departments: getUnique('Department'),
+                    types: getUnique('Type'),
+                    years: getUnique('Year'),
+                    statuses: uniqueStatuses
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -41,7 +85,22 @@ const Patents = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({
+            faculty: '',
+            department: '',
+            type: '',
+            year: '',
+            status: ''
+        });
+    };
 
     if (loading) return <div className="loading">💡 Loading patents data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
@@ -52,15 +111,71 @@ const Patents = () => {
     const internationalCount = data?.raw?.filter(p =>
         p['National/International']?.toLowerCase().includes('international')
     ).length || 0;
+
+
     const internationalPercentage = totalPatents > 0 ? ((internationalCount / totalPatents) * 100).toFixed(1) : 0;
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('patents-dashboard', 'Patent Portfolio Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">💡 Patent Portfolio</h1>
-                <p className="dashboard-subtitle">
-                    Innovation metrics tracking patent filings, grants, and intellectual property development
-                </p>
+        <div className="dashboard-container" id="patents-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">💡 Patent Portfolio</h1>
+                    <p className="dashboard-subtitle">
+                        Innovation metrics tracking patent filings, grants, and intellectual property development
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Faculty</label>
+                    <select name="faculty" value={filters.faculty} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Faculty</option>
+                        {filterOptions.faculties.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Department</label>
+                    <select name="department" value={filters.department} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Departments</option>
+                        {filterOptions.departments.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Type</label>
+                    <select name="type" value={filters.type} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Types</option>
+                        {filterOptions.types.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Year</label>
+                    <select name="year" value={filters.year} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Years</option>
+                        {filterOptions.years.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Status</label>
+                    <select name="status" value={filters.status} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Statuses</option>
+                        {filterOptions.statuses.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+
+                {Object.values(filters).some(Boolean) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}

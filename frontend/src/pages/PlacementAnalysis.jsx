@@ -14,6 +14,7 @@ import {
     premiumPieLabel
 } from '../utils/PremiumChartConfig';
 import '../styles/Dashboard.css';
+import { generatePDFReport } from '../utils/reportGenerator';
 
 const PlacementAnalysis = () => {
     const [data, setData] = useState(null);
@@ -21,11 +22,47 @@ const PlacementAnalysis = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
+    // Filter State
+    const [filters, setFilters] = useState({
+        program: '',
+        company: '',
+        minPackage: '',
+        status: ''
+    });
+
+    // Filter Options
+    const [filterOptions, setFilterOptions] = useState({
+        programs: [],
+        companies: [],
+        statuses: []
+    });
+
     const fetchData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/placement-analysis`);
+            const params = new URLSearchParams();
+            if (filters.program) params.append('program', filters.program);
+            if (filters.company) params.append('company', filters.company);
+            if (filters.minPackage) params.append('minPackage', filters.minPackage);
+            if (filters.status) params.append('status', filters.status);
+
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/placement-analysis?${params.toString()}`);
             setData(response.data.data);
+
+            // Populate options from raw data on initial load
+            if (filterOptions.programs.length === 0 && response.data.data.raw) {
+                const raw = response.data.data.raw;
+                const uniquePrograms = [...new Set(raw.map(item => item.program || item.Program))].filter(Boolean).sort();
+                const uniqueCompanies = [...new Set(raw.map(item => item.Company))].filter(Boolean).sort();
+                const uniqueStatuses = [...new Set(raw.map(item => item.Status))].filter(Boolean).sort();
+
+                setFilterOptions({
+                    programs: uniquePrograms,
+                    companies: uniqueCompanies,
+                    statuses: uniqueStatuses
+                });
+            }
+
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {
@@ -39,18 +76,84 @@ const PlacementAnalysis = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [filters]);
+
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const resetFilters = () => {
+        setFilters({
+            program: '',
+            company: '',
+            minPackage: '',
+            status: ''
+        });
+    };
 
     if (loading) return <div className="loading">🏆 Loading placement data...</div>;
     if (error) return <div className="error">❌ Error loading data: {error}</div>;
 
+    const handleDownloadReport = async () => {
+        await generatePDFReport('placement-analysis-dashboard', 'Placement Analysis Report');
+    };
+
     return (
-        <div className="dashboard-container">
-            <div className="dashboard-header">
-                <h1 className="dashboard-title">🏆 Placement Analysis</h1>
-                <p className="dashboard-subtitle">
-                    Comprehensive career placement statistics, top recruiters, and compensation analytics
-                </p>
+        <div className="dashboard-container" id="placement-analysis-dashboard">
+            <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 className="dashboard-title">🏆 Placement Analysis</h1>
+                    <p className="dashboard-subtitle">
+                        Comprehensive career placement statistics, top recruiters, and compensation analytics
+                    </p>
+                </div>
+                <button onClick={handleDownloadReport} className="download-btn">
+                    📄 Download Report
+                </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="filter-container">
+                <div className="filter-group">
+                    <label className="filter-label">Program</label>
+                    <select name="program" value={filters.program} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Programs</option>
+                        {filterOptions.programs.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Company</label>
+                    <select name="company" value={filters.company} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Companies</option>
+                        {filterOptions.companies.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Status</label>
+                    <select name="status" value={filters.status} onChange={handleFilterChange} className="filter-select">
+                        <option value="">All Statuses</option>
+                        {filterOptions.statuses.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group" style={{ flex: '0 0 160px' }}>
+                    <label className="filter-label">Min Package (LPA)</label>
+                    <input
+                        type="number"
+                        name="minPackage"
+                        value={filters.minPackage}
+                        onChange={handleFilterChange}
+                        className="filter-input"
+                        placeholder="0"
+                        min="0"
+                    />
+                </div>
+
+                {Object.values(filters).some(Boolean) && (
+                    <button onClick={resetFilters} className="reset-filters-btn">
+                        <span>↺</span> Reset
+                    </button>
+                )}
             </div>
 
             {/* Premium Stats Cards */}
